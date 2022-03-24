@@ -3,246 +3,186 @@ global polynomial_degree
 section .text
 
 ; input :
-; rdi - tablica intów
-; rsi - rozmiar tablicy
+; rdi - const int *y
+; rsi - size_t n, length of *y array
 
-; wynik :
-; rbp - stopien wielomianu
+; output :
+; rax - minimal degree of a polynomial that satisfies given array
 
 polynomial_degree:
-    push r12
-    push r13
-    push r14
-    push r15
-    push rbx 
-    push rbp
+                                ; save registers' values
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+    push    rbx 
+    push    rbp
 
-    mov r12, 0 ; iterator po tablicy od zera
-    mov r13, rsi
-    dec r13
-    jz .check_if_zero
+    xor     r12, r12            ; iterete through input array from 0
+    mov     r13, rsi            ; save initial lenght of array
+    dec     r13                 ; since in the following loop we access 
+                                ; one element forward, decrement end of array 
+    jz      .check_if_zero      ; only one element in input array
     .check_const_input:
-        ; sprawdź, czy początkowy input to tablica o stałych wartościach
-        ; tablica jest pod rdi
-        mov eax, dword [rdi + 4 * r12] ; bliższy element
-        cmp eax, dword [rdi + 4 * (r12 + 1)] ; dalszy element
-        jne .not_const ; elementy są różne
-        inc r12 ; zwiększamy iterator po tablicy
-        cmp r12, r13 ; czy doszliśmy do końca tablicy
-        jne .check_const_input
-        ; stała tablica, teraz pytanie, czy z zerami
+                                ; check if input array consists of only one value
+        mov     eax, [rdi + 4 * r12] 
+        cmp     eax, [rdi + 4 * (r12 + 1)] 
+        jne     .not_const      ; different elements occur in
+        inc     r12 
+        cmp     r12, r13 
+        jne     .check_const_input
+
+                                ; input array consists of only one value
     .check_if_zero:
-        mov rax, 0
-        mov ebx, 0
-        cmp ebx, dword [rdi + 4 * r12] ; czy w tablicy jest 0
-        jne .finish_early
-        mov rax, -1
-        jmp .finish_early
+        xor     rax, rax
+        xor     ebx, ebx
+        cmp     ebx, [rdi + 4 * r12] 
+        jne     .finish_early   ; the value is not zero
+        mov     rax, -1         ; it is zero only in the array
+        jmp     .finish_early
 
-
-    .not_const:
-        ; ile bedzie mial bigint? 3 inty
-        ; więc rezerwujemy 4*4*3 bajty - 4biginty, kazdy po 3*4 bajty
-        ; w sumie to 3 biginty, ale to już nieistotne zupełnie    
-        mov r12, 0 ; iterator po elementach tablicy od zera
-
-        ; poczatek obliczania dlugosci
-        mov r15, rsi ; r15 = n
-        
-        shr r15, 5 ; r15 = n/32
-        add r15, 3 ; r15 = n/32 + 3, może byc o jedno za dużo, ale dobra
-        mov r8, r15 ; dlugosc biginta
-        imul r8, 4 ; liczba bajtów w int
-        imul r8, rsi ; liczba intów
-        sub rsp, r8 ; rezerwowana liczba bajtów na stosie
-        mov r14, rsp ; przepisanie wskaźnika na początek stosu
-        ; koniec obliczania dlugosci
-
+    .not_const:  
+                                ; upper estimate for the length of the array is n/32 + 3
+                                ; where it's calculated in how many ints fit into one bigint
+        mov     r15, rsi        ; r15 = n
+        shr     r15, 5          ; r15 = n/32
+        add     r15, 3          ; r15 = n/32 + 3
+        mov     r8, r15         ; number of ints in bigint
+        shl     r8, 2           ; number of bytes in each int
+        imul    r8, rsi         ; number of bigints
+        sub     rsp, r8         ; make space on the stack
+        mov     r14, rsp        ; move pointer to r14
+        xor     r12, r12        ; iterate through array from the start
 
     .create_bigint_loop:
-        ; podwójna pętla, zewnętrzna po elementach tablicy
-        ; wewnętrzna wypełniająca całego biginta
-        mov r13, 1 ; iterator po segmentach biginta od 1, bo 0 ustawiami ręcznie
-        mov eax, dword [rdi + 4 * r12]
-        ; przeniesienie pod tablicę bigintów początkowej wartości
-        mov r8, r15 ; pomocnicza zmienna do ustalania pozycji
-        imul r8, r12
-        imul r8, 4
-        mov [r14 + r8], eax; r12 * 4 przemnożone przez liczbę bigintów
-        ; to znaczy, dla r15=3, do id=1 zajrzymy pod [r14 + 12], bo +0,+4,+8 zajęte
-        cmp eax, 0
-        jge .fill_zeroes_loop ; narazie załóżmy, że zawsze są >= 0
+        mov     r13, 1          ; iterate through bigint's segments from 1
+                                ; because we set 0th outside of loop
+        mov     r9d, [rdi + 4 * r12]
+        mov     r8, r15         ; position in the bigint array
+        imul    r8, r12
+        shl     r8, 2
+        mov     eax, 0          ; set for case, when first int is positive
+        mov     [r14 + r8], r9d ; copy first element
+        cmp     r9d, 0          ; sign of the first element
+        jge     .fill_bigint_loop
+                                ; first int is negative
+        mov     eax, -1
+                                ; fill remaining ints according to sign
+        .fill_bigint_loop:
+            mov     r8, r12     ; position in the array
+            imul    r8, r15     ; move by length of r12 bigints
+            shl     r8, 2    
+            mov     r9, r13     ; move by position within bigint
+            shl     r9, 2
+            add     r8, r9
+            mov     [r14 + r8], eax
+            inc     r13
+            cmp     r13, r15    ; is loop finished
+            jne     .fill_bigint_loop
+                                ; all ints are filled with correct sign
+        inc     r12                 
+        cmp     r12, rsi        
+        jne     .create_bigint_loop
+                                ; entire input array is copied to bigints
 
-        .fill_minus_ones_loop:
-        ; pętla wstawia -1 na pozostałe segmenty biginta
-            mov eax, -1
-            mov r8, r12
-            imul r8, r15 
-            imul r8, 4 ; dla r12=1, r15=3 mamy 12 - pierwszy el drugiego
-            mov r9, r13
-            imul r9, 4
-            add r8, r9
-            ; imul r8, r13
-            ; imul r8, 4
-            mov [r14 + r8], eax; np [r14 + 4*(3 + {1,2})]
-            ; czyli [r14 + 16], [r14 + 20] dla biginta długości 3 i el. ind=1
-            inc r13
-            cmp r13, r15 ; czy wypelnilismy wszystkie elementy
-            jne .fill_minus_ones_loop
-            jmp .after_filling
-
-
-        .fill_zeroes_loop:
-            ; pętla zeruje wszystkie następne segmenty biginta
-            mov eax, 0
-            mov r8, r12
-            imul r8, r15 
-            imul r8, 4 ; dla r12=1, r15=3 mamy 12 - pierwszy el drugiego
-            mov r9, r13
-            imul r9, 4
-            add r8, r9
-            ; imul r8, r13
-            ; imul r8, 4
-            mov [r14 + r8], eax; np [r14 + 4*(3 + {1,2})]
-            ; czyli [r14 + 16], [r14 + 20] dla biginta długości 3 i el. ind=1
-            inc r13
-            cmp r13, r15 ; czy wypelnilismy wszystkie elementy
-            jne .fill_zeroes_loop
-            
-        .after_filling:
-            inc r12 ; następny element tablicy
-            cmp r12, rsi ; czy koniec tablicy
-            jne .create_bigint_loop
-
-    ; przepisana tablica wejściowa do tablicy bigintów
-
-    
-    mov rbx, rsi ; rbx - dlugość rozpatrywanej tablicy
+    mov     rbx, rsi            ; rbx - current length of array we look at
 
     .till_const_loop:
-        ; pętla która wywoluje odejmowania do momentu, aż
-        ; nie będzie wszędzie w tablicy zer
-        ; każdy obrót pętli skraca tablicę o jeden element
-        mov r12, 0 ; iterator po elementach tablicy od zera
+                                ; substract adjacent elements of array
+                                ; until it either shrunk to 1 element
+                                ; or all elements are equal to 0
+        xor     r12, r12        ; iterate through array elements from 0
         .sub_loop:
-            ; jedno wykonanie kroku algorytmu, wewnętrzna pętla
-            ; pętla, gdzie odejmuje od siebie sąsiadów
-            ; najpierw odejmujemy normalnie pierwsze elementy
-            ; potem robimy sbb na kolejnych intach w bigincie
-            ; zewnętrzna pętla: po elementach tablicy
-            ; wewnętrzna pętla: po segmentach biginta
-            mov r13, 0 ; iterator po bigint od zera 
-            mov r8, r12
-            imul r8, r15 ; przesuniecie o rozmiar biginta do kolejnego
-            imul r8, 4 ;
-            mov r9, 0 ; zaczynamy od zera
-            
-            clc ; reset carry flag
-            pushf ; save flags
-            ; przy kazdej iteracji zwiekszamy r8 i r9 o 
+            xor     r13, r13      ; iterate through bigint from 0
+            mov     r8, r12     ; r8 - closer
+            imul    r8, r15     ; move by size of one bigint
+            shl     r8, 2
+            xor     r9, r9      ; r9 - further element
+            clc                 ; reset carry flag
+            pushf               ; save flag
             .sub_bigint_loop:
-                mov r9, r15
-                imul r9, 4 ; przesuniecie na poczatek drugiego biginta - liczba intów * dlugosc inta
-                add r9, r8 ; miejsce w bigincie
-                ; np jak r8=0, to r9=12
-                ; jak r8 = 4, to r9=16 dla dlugosci bigint= 3 inty
-                mov eax, [r14 + r9] ; dalszy elem
-                popf ; get saved flags
-                sbb eax, [r14 + r8] ; blizszy elem
-                pushf ; save flags, carry most importantly
-                mov [r14 + r8], eax
-
+                mov     r9, r15
+                shl     r9, 2   ; move by length of one bigint
+                add     r9, r8  ; move within the bigint
+                mov     eax, [r14 + r9]
+                popf            ; get saved flags
+                sbb     eax, [r14 + r8]
+                pushf           ; save flags, carry most importantly
+                mov     [r14 + r8], eax
+                                ; move iterators
+                lea     r8, [r8 + 4]
+                lea     r13, [r13 + 1]     
+                cmp     r13, r15    
                 
-                lea r8, [r8 + 4] ; move r8 4 bytes forward
-                lea r13, [r13 + 1] ; inc r13        
-                cmp r13, r15 ; is loop finished
-                
-                jne .sub_bigint_loop
-            
-            popf
-            inc r12
-            cmp r12, rbx
-            jne .sub_loop
-
-        dec rbx ; zmniejsz rozmiar rozpatrywanej tablicy
-        cmp rbx, 1 ; czy został już tylko jeden element
-        jnz .before_check_for_const_loop ; więcej niż jeden element
-        ; faktycznie został tylko jeden element, czy jest to 0?
-        ; przejsc sie po big int i sprawdzic czy ma same zera
-        ; można skorzystać z nie używanego poza tym rejestru rdx
-        mov rdx, 0 ; przechodzimy po bigincie od poczatku
+                jne     .sub_bigint_loop
+                                ; loop within a pair of bigints finished
+            popf                ; get saved flags
+            inc     r12
+            cmp     r12, rbx
+            jne     .sub_loop
+                                ; all substractions finished
+        dec     rbx             ; now array shorter by one element
+        cmp     rbx, 1          ; check if there is only one element left
+        jnz     .before_check_for_const_loop 
+                                ; only one element left
+        xor     rdx, rdx        ; iterate through last bigint
         .check_last_element_loop:
-            mov eax, [r14 + 4 * rdx]
-            cmp eax, 0
-            jne .last_is_not_zero ; ostatni element nie jest równy 0
-            inc rdx
-            cmp rdx, r15 ; czy doszlismy do konca biginta
-            jne .check_last_element_loop
-            ; ostatni element to 0
-            ;;;; !!!!! WAŻNE !!!!! ;;;;
-            ; TU JEST PEWNIE BŁĄD W ZWRACANIU WARTOŚCI RAX ;
-            mov rax, rsi
-            sub rax, 2
-            ; mov rax, 9998 debug
-            jmp .finish
-
-        ; ostatni element nie jest 0, zwracamy najwyższy stopień = n - 1
+            mov     eax, [r14 + 4 * rdx]
+            cmp     eax, 0          
+            jne     .last_is_not_zero
+            inc     rdx
+            cmp     rdx, r15     ; is loop finished
+            jne     .check_last_element_loop
+                                ; last bigint equals 0
+            mov     rax, rsi        
+            sub     rax, 2
+            jmp     .finish
+                                ; last bigint doesn't equal 0
+                                ; result is the biggest possible answer
         .last_is_not_zero:
-            mov rax, rsi
-            dec rax
-            jmp .finish
-
-        ; odejmowanie na bigintach zakończone, sprawdźmy, czy wszędzie jest 0
-
+            mov     rax, rsi
+            dec     rax
+            jmp     .finish
+                                ; there are at least two elements
         .before_check_for_const_loop:
-        ; przeiterować się po każdym segmencie każdego biginta i sprawdzić,
-        ; czy jest tam 0
-        mov rdx, 0 ; iterator po tablicy, rdx nie jest nigdzie indziej używany
-        mov r12, r15 ; liczba intow w bigincie
-        imul r12, 4 ; to już rozmiar jednego biginta
-        imul r12, rbx ; razy liczba bigintów w tablicy
+            xor     rdx, rdx      ; iterate through array from 0
+            mov     r12, r15    ; number of ints in bigint
+            shl     r12, 2      ; size of one int
+            imul    r12, rbx    ; number of bigints in array
+
         .check_for_const_loop:
-            ; w tablicy jest jeszcze >1 bigint
-            ; pętla sprawdza, czy wszystkie wartości w tablicy
-            ; wynoszą 0
-            ; zwracamy szczególna uwagę na sytuację, gdy w tablicy jest tylko 
-            ; 1 element. jesli jest różny od 0, wynik to rsi - 1
-            ; jak równy to, to wynik jak w innych przypadkach #liczba obrotów pętli
-            mov eax, [r14 + rdx] ; kolejny element tablicy
-            cmp eax, 0
-            jne .till_const_loop ; nie ma tam zera, kolejna iteracja algorytmu
-            ; tu jest zero, patrzymy dalej
-            add rdx, 4
-            cmp rdx, r12 ; czy doszlismy do konca
-            jne .check_for_const_loop
-            ; faktycznie są same zera, zwracamy wynik
-
-            mov rax, rsi
-            sub rax, rbx
-            sub rax, 1
-            ; mov rax, 999
-            jmp .finish
-
-
-        
-        jnz .till_const_loop 
-    ; mov rax, r14 
-    mov rax, rsi - 1
-
-    
-    
+            mov     eax, [r14 + rdx] 
+            cmp     eax, 0
+            jne     .till_const_loop 
+                                ; zeroes only so far
+                                ; look futher
+            lea     rdx, [rdx + 4]
+            cmp     rdx, r12
+            jne     .check_for_const_loop
+                            ; all bigints equal 0
+            mov     rax, rsi  
+            sub     rax, rbx
+            dec     rax
+            jmp     .finish
+                                ; not all elements equal 0
+        jnz     .till_const_loop 
+    mov     rax, rsi            ; result is the biggest possible answer
+    dec     rax
 
     .finish:
-        mov r8, r15
-        imul r8, 4
-        imul r8, rsi
-        add rsp, r8
+                                ; add to rsp number of bytes allocated
+        mov     r8, r15
+        shl     r8, 2
+        imul    r8, rsi
+        add     rsp, r8
     .finish_early:
-        pop rbp
-        pop rbx
-        pop r15
-        pop r14
-        pop r13
-        pop r12
+                                ; pop registers, but don't add to rsp
+                                ; since it wasn't moved
+        pop     rbp
+        pop     rbx
+        pop     r15
+        pop     r14
+        pop     r13
+        pop     r12
         
         ret
