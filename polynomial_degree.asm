@@ -27,11 +27,10 @@ polynomial_degree:
                                 ; check if input array consists of only one value
         mov     eax, [rdi + 4 * r12] 
         cmp     eax, [rdi + 4 * (r12 + 1)] 
-        jne     .not_const      ; different elements occur in
+        jne     .not_const      ; different elements occur in input array
         inc     r12 
         cmp     r12, r13 
         jne     .check_const_input
-
                                 ; input array consists of only one value
     .check_if_zero:
         xor     rax, rax
@@ -93,35 +92,34 @@ polynomial_degree:
                                 ; or all elements are equal to 0
         xor     r12, r12        ; iterate through array elements from 0
         .sub_loop:
-            xor     r13, r13      ; iterate through bigint from 0
-            mov     r8, r12     ; r8 - closer
+            xor     r13, r13    ; iterate through bigint from 0
+            mov     r8, r12     ; r8 - closer element
             imul    r8, r15     ; move by size of one bigint
             shl     r8, 2
             xor     r9, r9      ; r9 - further element
+
+            mov     rcx, r15    ; iterate downwards
+            mov     rdx, r15    
+            shl     rdx, 2      ; rdx equals the length of one bigint
+
             clc                 ; reset carry flag
-            pushf               ; save flag
             .sub_bigint_loop:
-                mov     r9, r15
-                shl     r9, 2   ; move by length of one bigint
-                add     r9, r8  ; move within the bigint
+                mov     r9, rdx ; move by length od one bigint
+                                ; move within the bigint
+                lea     r9, [r9 + r8] 
                 mov     eax, [r14 + r9]
-                popf            ; get saved flags
                 sbb     eax, [r14 + r8]
-                pushf           ; save flags, carry most importantly
                 mov     [r14 + r8], eax
                                 ; move iterators
                 lea     r8, [r8 + 4]
                 lea     r13, [r13 + 1]     
-                cmp     r13, r15    
-                
-                jne     .sub_bigint_loop
+                loop .sub_bigint_loop
                                 ; loop within a pair of bigints finished
-            popf                ; get saved flags
             inc     r12
             cmp     r12, rbx
             jne     .sub_loop
                                 ; all substractions finished
-        dec     rbx             ; now array shorter by one element
+        dec     rbx             ; now array is shorter by one element
         cmp     rbx, 1          ; check if there is only one element left
         jnz     .before_check_for_const_loop 
                                 ; only one element left
@@ -145,7 +143,7 @@ polynomial_degree:
             jmp     .finish
                                 ; there are at least two elements
         .before_check_for_const_loop:
-            xor     rdx, rdx      ; iterate through array from 0
+            xor     rdx, rdx     ; iterate through array from 0
             mov     r12, r15    ; number of ints in bigint
             shl     r12, 2      ; size of one int
             imul    r12, rbx    ; number of bigints in array
@@ -159,7 +157,7 @@ polynomial_degree:
             lea     rdx, [rdx + 4]
             cmp     rdx, r12
             jne     .check_for_const_loop
-                            ; all bigints equal 0
+                                ; all bigints equal 0
             mov     rax, rsi  
             sub     rax, rbx
             dec     rax
