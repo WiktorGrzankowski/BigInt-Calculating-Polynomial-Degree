@@ -9,8 +9,8 @@ elements in the array until all elements are equal to 0, or there are
 no more elements to subtract. This may result in an overflow, so
 I created a structure similar to a BigInt/InfInt, so each int
 is actually represented as a series of ints on which calculations
-can be perfmored no matter the length of the resulting number.
-polynomial. An example of usage is provided in test.c
+can be perfmored no matter the length of the resulting number. 
+An example of usage is provided in test.c
 To run the program type:
 
 nasm -f elf64 -w+all -w+error -o polynomial_degree.o polynomial_degree.asm
