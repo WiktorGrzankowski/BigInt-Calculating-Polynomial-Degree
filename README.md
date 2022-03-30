@@ -6,7 +6,7 @@ with the declaration as "int polynomial_degree(const int *y, size_t n)"
 and calculates the minimal degree of a polynomial that satisfies the 
 given array. Algorithm used to find the answer subtracts adjacent
 elements in the array until all elements are equal to 0, or there are
-no more element to subtract. This may result in an overflow, so
+no more elements to subtract. This may result in an overflow, so
 I created a structure similar to a BigInt/InfInt, so each int
 is actually represented as a series of ints on which calculations
 can be perfmored no matter the length of the resulting number.
