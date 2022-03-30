@@ -12,6 +12,7 @@ is actually represented as a series of ints on which calculations
 can be perfmored no matter the length of the resulting number.
 polynomial. An example of usage is provided in test.c
 To run the program type:
+
 nasm -f elf64 -w+all -w+error -o polynomial_degree.o polynomial_degree.asm
 gcc -c -Wall -Wextra -std=c17 -O2 -o test.o test.c
 gcc -o test test.o polynomial_degree.o
